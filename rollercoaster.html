@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>It's Not a Game</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=VT323&display=swap">
+<style>
+/* Header font. Barosa isn't on Google Fonts, so put your Barosa file next to index.html
+   and make the filenames below match it (any one of these formats is enough). */
+@font-face{
+  font-family:"Barosa";
+  src:local("Barosa"),
+      url("Barosa.woff2") format("woff2"),
+      url("Barosa.woff") format("woff"),
+      url("Barosa.otf") format("opentype"),
+      url("Barosa.ttf") format("truetype");
+  font-display:swap;
+}
+</style>
+<style>
+/* Layout: one arcade cabinet column — marquee, HUD, square playfield, d-pad on touch. Single dark look taken from the sprites' own palette. */
+:root{
+  --night:#16142e;      /* page */
+  --track:#211e45;      /* board tile A */
+  --track2:#272457;     /* board tile B */
+  --ink:#29255a;        /* sprite outline navy */
+  --mint:#bcf0c4;       /* cart top glow */
+  --lime:#e5fb8e;       /* cart bottom glow */
+  --steel:#6283b2;      /* cart body */
+  --rust:#b05f5f;       /* mouth */
+  --dim:#8d94c4;
+  --title:"Barosa",Georgia,serif;
+  --display:"Silkscreen","Courier New",monospace;
+  --body:"VT323","Courier New",monospace;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{background:var(--night);color:var(--mint);font-family:var(--body);font-size:20px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px;
+  display:flex;flex-direction:column;align-items:center;gap:12px;box-sizing:border-box;-webkit-user-select:none;user-select:none}
+.cab{width:100%;max-width:560px;position:relative;z-index:1;display:flex;flex-direction:column;gap:10px}
+h1{position:relative;align-self:center;width:min(calc(100vw - 32px),1000px);text-align:center;font-family:var(--title);font-weight:400;font-size:clamp(46px,12.5vw,128px);line-height:.9;margin:0;letter-spacing:.02em;
+  color:var(--lime);text-shadow:3px 3px 0 var(--ink),-2px 0 0 #4ad0c8;text-wrap:balance}
+h1 small{display:block;font-size:max(11px,.17em);margin-top:14px !important;color:var(--dim);text-shadow:none;letter-spacing:.14em;margin-top:6px;font-weight:400}
+.hud{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;font-variant-numeric:tabular-nums}
+.stat{display:flex;flex-direction:column;line-height:1}
+.stat b{font-family:var(--display);font-size:11px;letter-spacing:.14em;color:var(--dim);font-weight:400}
+.stat span{font-size:34px;color:var(--lime)}
+.roster{display:flex;gap:6px;align-items:flex-end}
+.kid{display:flex;flex-direction:column;align-items:center;font-size:16px;color:var(--dim);line-height:1;width:34px}
+.kid img{width:30px;height:30px;image-rendering:pixelated;opacity:.45;transition:opacity .2s}
+.kid.got img{opacity:1}
+.kid.got{color:var(--lime)}
+.screen{position:relative;width:100%;aspect-ratio:1;max-width:100%;border:4px solid var(--ink);box-shadow:0 0 0 4px #31503a,0 0 0 8px var(--ink);background:var(--track)}
+canvas{display:block;width:100%;height:100%;image-rendering:pixelated;touch-action:none}
+.overlay{position:absolute;inset:0;display:flex;z-index:2;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;
+  background:rgba(22,20,46,.72);padding:16px}
+.overlay h2{font-family:var(--display);font-size:clamp(18px,5vw,28px);margin:0;color:var(--lime);text-shadow:2px 2px 0 var(--ink)}
+.overlay p{margin:0;max-width:30ch;font-size:21px;line-height:1.15;color:var(--mint)}
+button{font-family:var(--display);font-size:14px;letter-spacing:.08em;color:var(--ink);background:var(--lime);border:0;
+  box-shadow:0 4px 0 #6f6b23,0 4px 0 2px var(--ink),0 0 0 2px var(--ink);padding:12px 20px;cursor:pointer}
+button:active{transform:translateY(3px);box-shadow:0 1px 0 #6f6b23,0 1px 0 2px var(--ink),0 0 0 2px var(--ink)}
+h1 small{font-family:var(--display)}
+/* ---- textures ----
+   grain.png = light specks on transparent (laid over things at different strengths)
+   wear.png  = the same specks in the page colour (looks like the ink has worn off) */
+/* 1. faint grain over the whole page */
+body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:5;
+  background:url("grain.png") center/cover no-repeat;opacity:.12}
+/* 2. heavy wear on the title */
+h1::after{content:"";position:absolute;inset:-4px;pointer-events:none;
+  background:url("wear.png") 20% 30%/1300px auto repeat;opacity:.9}
+/* 3. dust on the playfield glass */
+.screen::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:1;
+  background:url("grain.png") 15% 50%/1600px auto repeat;opacity:.1}
+/* 4. scuffs on the start / game-over card */
+.overlay::before{content:"";position:absolute;inset:0;pointer-events:none;z-index:-1;
+  background:url("grain.png") 85% 10%/1300px auto repeat;opacity:.22}
+.overlay{isolation:isolate}
+/* 5. worn buttons */
+button,.more{position:relative}
+#go::after,.more::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:url("wear.png") 30% 20%/1000px auto repeat;opacity:.8}
+.more{font-family:var(--display);font-size:11px;letter-spacing:.12em;color:var(--mint);text-decoration:none;
+  padding:8px 12px;box-shadow:0 0 0 2px var(--steel);animation:flick 3s steps(1) infinite}
+.more:hover{color:var(--lime);box-shadow:0 0 0 2px var(--lime)}
+.more:focus-visible{outline:3px solid var(--mint);outline-offset:4px}
+@keyframes flick{0%,92%{opacity:1;transform:none}93%{opacity:.3;transform:translateX(-3px)}95%{opacity:1;transform:translateX(2px)}97%{opacity:.6}}
+@media (prefers-reduced-motion:reduce){.more{animation:none}}
+button:focus-visible{outline:3px solid var(--mint);outline-offset:4px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;color:var(--dim);font-size:18px}
+.ghost{background:transparent;color:var(--mint);box-shadow:0 0 0 2px var(--steel);padding:8px 12px;font-size:11px}
+.ghost:active{transform:none;box-shadow:0 0 0 2px var(--mint)}
+.pad{display:none;grid-template-columns:repeat(3,64px);grid-template-rows:repeat(2,56px);gap:8px;justify-content:center;margin-top:4px}
+.pad button{padding:0;font-size:20px;background:var(--track2);color:var(--mint);box-shadow:0 0 0 2px var(--steel)}
+.pad button:active{background:var(--steel);transform:none}
+.pad .u{grid-column:2}.pad .l{grid-column:1;grid-row:2}.pad .d{grid-column:2;grid-row:2}.pad .r{grid-column:3;grid-row:2}
+.overlay[hidden],.overlay.off{display:none!important}
+@media (pointer:coarse){.pad{display:grid}.keys{display:none}}
+</style>
+</head>
+<body>
+<div class="cab">
+  <h1>It&rsquo;s not a game. It&rsquo;s just a ride.<small>EAT THE KIDS · SPARE NO ONE · EXCEPT HER</small></h1>
+  <div class="hud">
+    <div class="stat"><b>SCORE</b><span id="score">0</span></div>
+    <div class="roster" id="roster"></div>
+    <div class="stat" style="text-align:right"><b>BEST</b><span id="best">0</span></div>
+  </div>
+  <div class="screen">
+    <canvas id="c" width="576" height="576" aria-label="Snake playfield"></canvas>
+    <div class="overlay" id="ov">
+      <h2 id="ovT">ALL ABOARD</h2>
+      <p id="ovP">Steer the coaster into the kids. Each one adds a cart. </p>
+      <button id="go" type="button">START RIDE</button>
+      <a id="more" class="more" href="https://linktr.ee/rtcharvard" target="_blank" rel="noopener" hidden>WHO IS SHE?</a>
+    </div>
+  </div>
+  <div class="row">
+    <span class="keys">Arrows / WASD to steer · Space to pause</span>
+    <button class="ghost" id="mute" type="button">SOUND: ON</button>
+  </div>
+  <div class="pad" aria-label="Direction pad">
+    <button class="u" data-d="up" type="button" aria-label="Up">▲</button>
+    <button class="l" data-d="left" type="button" aria-label="Left">◀</button>
+    <button class="d" data-d="down" type="button" aria-label="Down">▼</button>
+    <button class="r" data-d="right" type="button" aria-label="Right">▶</button>
+  </div>
+</div>
+
+<script>
+// Image files. Keep these next to index.html (or change the paths here).
+const SPR = {
+  Constance: "Constance_RTC_sprite.png",
+  Jane: "Jane_RTC_sprite.png",
+  Mischa: "Mischa_RTC_sprite.png",
+  Noel: "Noel_RTC_sprite.png",
+  Ocean: "Ocean_RTC_sprite.png",
+  Ricky: "Ricky_RTC_sprite.png",
+  Roller_coaster_head: "Roller_coaster_head_RTC_sprite.png",
+  Roller_coaster_head_2: "Roller_coaster_head_RTC_sprite_2.png",
+  Roller_coaster_head_3: "Roller_coaster_head_RTC_sprite_3.png",
+  cart_1: "cart_1_RTC_sprite.png",
+  cart_2: "cart_2_RTC_sprite.png",
+  cart_3: "cart_3_RTC_sprite.png",
+  cart_4: "cart_4_RTC_sprite.png",
+  cart_5: "cart_5_RTC_sprite.png",
+  cart_6: "cart_6_RTC_sprite.png",
+  cart_7: "cart_7_RTC_sprite.png",
+};
+const KIDS = ["Constance","Mischa","Noel","Ocean","Ricky"];
+const N = 18;                 // cells per side
+const PX = 32;                // sprite pixels per cell (canvas is N*PX)
+const cv = document.getElementById('c');
+cv.width = cv.height = N*PX;
+const ctx = cv.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+// ---------- load sprites ----------
+const img = {};
+let pending = Object.keys(SPR).length;
+// The source art is drawn on a 32x32 pixel grid, so shrink each image to 32x32
+// by sampling the centre of every grid cell. Works for any image size.
+function shrink(src){
+  const c=document.createElement('canvas'); c.width=c.height=32;
+  const x=c.getContext('2d'); x.imageSmoothingEnabled=false;
+  const w=src.naturalWidth/32, h=src.naturalHeight/32;
+  for(let py=0;py<32;py++) for(let px=0;px<32;px++)
+    x.drawImage(src,Math.floor((px+.5)*w),Math.floor((py+.5)*h),1,1,px,py,1,1);
+  return c;
+}
+for (const k in SPR){
+  const i=new Image();
+  i.onload=()=>{ img[k]=shrink(i); if(--pending===0) boot(); };
+  i.onerror=()=>{ console.error('Could not load '+SPR[k]); document.getElementById('ovP').textContent='Missing image: '+SPR[k]+'. Put it in the same folder as index.html.'; };
+  i.src=SPR[k];
+}
+
+// tinted copies of Jane for the RGB-split glitch
+function tint(src, keep){
+  const c=document.createElement('canvas'); c.width=c.height=32;
+  const x=c.getContext('2d'); x.drawImage(src,0,0);
+  x.globalCompositeOperation='multiply';
+  x.fillStyle='rgb('+keep.map(v=>v*255).join(',')+')'; x.fillRect(0,0,32,32);
+  x.globalCompositeOperation='destination-in'; x.drawImage(src,0,0);
+  return c;
+}
+let janeR, janeC;
+
+// ---------- state ----------
+const DIRS = {up:[0,-1],down:[0,1],left:[-1,0],right:[1,0]};
+// sprites are drawn facing down (coupler on top), so rotate from there
+const ROT = {down:0,left:Math.PI/2,up:Math.PI,right:-Math.PI/2};
+let snake, dir, queue, kid, jane, score, best=0, state='idle', tick=0, lastStep=0, ate=0;
+let bursts=[], pops=[], shake=0, eaten={};
+try{ best=+localStorage.getItem('rcs-best')||0; }catch(e){}
+document.getElementById('best').textContent=best;
+
+function reset(){
+  snake=[{x:8,y:5},{x:8,y:4},{x:8,y:3},{x:8,y:2}];
+  dir='down'; queue=[]; score=0; ate=0; bursts=[]; pops=[];
+  eaten={}; KIDS.forEach(k=>eaten[k]=0);
+  jane={x:13,y:13,glitch:0,flick:0};
+  kid=null; placeKid();
+  renderRoster(); updScore();
+}
+function occupied(x,y){ return snake.some(s=>s.x===x&&s.y===y) || (kid&&kid.x===x&&kid.y===y) || (jane&&jane.x===x&&jane.y===y); }
+function freeCell(minDist){
+  const h=snake[0];
+  for(let t=0;t<400;t++){
+    const x=Math.floor(Math.random()*N), y=Math.floor(Math.random()*N);
+    if(occupied(x,y)) continue;
+    if(minDist && Math.max(Math.abs(x-h.x),Math.abs(y-h.y))<minDist) continue;
+    return {x,y};
+  }
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++) if(!occupied(x,y)) return {x,y};
+  return null;
+}
+function placeKid(){
+  const c=freeCell(3); if(!c) return;
+  const pool = KIDS.filter(k=>!kid||k!==kid.name);
+  kid={x:c.x,y:c.y,name:pool[Math.floor(Math.random()*pool.length)],born:performance.now()};
+}
+function teleportJane(){
+  bursts.push({x:jane.x,y:jane.y,t:performance.now()});
+  const old={x:jane.x,y:jane.y};
+  jane.x=-9; // free her old cell while searching
+  const c=freeCell(7)||freeCell(4)||old;
+  jane.x=c.x; jane.y=c.y; jane.flick=performance.now();
+  shake=8; sfx('glitch');
+}
+const cheb=(a,b)=>Math.max(Math.abs(a.x-b.x),Math.abs(a.y-b.y));
+
+// ---------- step ----------
+function step(){
+  if(queue.length) dir=queue.shift();
+  const [dx,dy]=DIRS[dir], h=snake[0];
+  const nh={x:h.x+dx,y:h.y+dy};
+  // Jane cannot be eaten. If the next move would land on her, she is already gone.
+  if(nh.x===jane.x&&nh.y===jane.y) teleportJane();
+  if(nh.x<0||nh.y<0||nh.x>=N||nh.y>=N) return die('You left the rails.');
+  const grow = kid && nh.x===kid.x && nh.y===kid.y;
+  const body = grow ? snake : snake.slice(0,-1);
+  if(body.some(s=>s.x===nh.x&&s.y===nh.y)) return die('The coaster hit itself.');
+  snake.unshift(nh);
+  if(grow){
+    score++; eaten[kid.name]++; ate=performance.now();
+    pops.push({x:kid.x,y:kid.y,txt:'+'+kid.name,t:ate});
+    sfx('eat'); placeKid(); renderRoster(); updScore();
+  } else snake.pop();
+  // she senses you a cell away and slips out before you can lunge
+  if(cheb(snake[0],jane)<=1 && Math.random()<.85) teleportJane();
+  tick++;
+}
+function die(msg){
+  state='over'; sfx('die'); shake=10;
+  if(score>best){ best=score; try{localStorage.setItem('rcs-best',best);}catch(e){} document.getElementById('best').textContent=best; }
+  showOv('END OF THE LINE', msg+' Kids eaten: '+score+'.', 'RIDE AGAIN');
+  document.getElementById('more').hidden=false;
+}
+
+// ---------- drawing ----------
+function drawSprite(im,x,y,rot,scale=1){
+  ctx.save(); ctx.translate(x*PX+PX/2,y*PX+PX/2); if(rot) ctx.rotate(rot); if(scale!==1) ctx.scale(scale,scale);
+  ctx.drawImage(im,-PX/2,-PX/2,PX,PX); ctx.restore();
+}
+function dirBetween(a,b){ // direction from b toward a
+  if(a.x>b.x) return 'right'; if(a.x<b.x) return 'left'; if(a.y>b.y) return 'down'; return 'up';
+}
+function drawBoard(){
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++){ ctx.fillStyle=(x+y)%2?'#211e45':'#25224f'; ctx.fillRect(x*PX,y*PX,PX,PX); }
+  // faint rail ties
+  ctx.fillStyle='rgba(98,131,178,.07)';
+  for(let y=0;y<N;y++) for(let x=0;x<N;x++) ctx.fillRect(x*PX+6,y*PX+15,20,2);
+}
+function drawJane(now){
+  const d=cheb(snake[0],jane);
+  // glitch intensity rises as the coaster closes in
+  let g = d<=1?1 : d===2?.75 : d===3?.45 : d===4?.18 : 0;
+  g = Math.max(g, .06*(Math.sin(now/700)>0.93)); // occasional idle twitch
+  const fl = now-jane.flick;
+  if(fl<350){ g=Math.max(g,1-fl/350); if(Math.random()<.4) return; } // flickering in
+  const cx=jane.x*PX, cy=jane.y*PX;
+  if(g<=0.02){ ctx.drawImage(img.Jane,cx,cy,PX,PX); return; }
+  const amp=g*7;
+  ctx.save();
+  ctx.globalCompositeOperation='lighter';
+  ctx.globalAlpha=.55*g;
+  ctx.drawImage(janeR,cx-amp*(Math.random()+.3),cy,PX,PX);
+  ctx.drawImage(janeC,cx+amp*(Math.random()+.3),cy,PX,PX);
+  ctx.restore();
+  // horizontal slice displacement
+  for(let sy=0;sy<32;sy+=2){
+    const off = Math.random()<g*.6 ? (Math.random()-.5)*amp*3 : 0;
+    ctx.drawImage(img.Jane,0,sy,32,2,cx+off,cy+sy,PX,2);
+  }
+  // corrupt blocks
+  const n=Math.floor(g*6);
+  for(let i=0;i<n;i++){
+    ctx.fillStyle=['#e5fb8e','#4ad0c8','#b05f5f','#000','#bcf0c4'][i%5];
+    ctx.fillRect(cx+Math.random()*PX-4,cy+Math.random()*PX,2+Math.random()*10,1+Math.random()*3);
+  }
+  if(g>.7 && Math.random()<.3){ ctx.fillStyle='rgba(255,255,255,.12)'; ctx.fillRect(0,cy+Math.random()*PX,cv.width,2); }
+}
+function drawBursts(now){
+  bursts=bursts.filter(b=>now-b.t<450);
+  for(const b of bursts){
+    const k=(now-b.t)/450, cx=b.x*PX, cy=b.y*PX;
+    for(let i=0;i<14;i++){
+      ctx.fillStyle=['#e5fb8e','#4ad0c8','#b05f5f','#e8e8e8'][i%4];
+      ctx.globalAlpha=1-k;
+      const w=4+Math.random()*28*(1+k);
+      ctx.fillRect(cx+PX/2-w/2+(Math.random()-.5)*PX*2*k, cy+Math.random()*PX, w, 1+Math.random()*3);
+    }
+    ctx.globalAlpha=1;
+    if(k<.25){ ctx.globalAlpha=.5; ctx.drawImage(img.Jane,0,8,32,16,cx-12,cy+8,PX+24,16); ctx.globalAlpha=1; }
+  }
+}
+function drawPops(now){
+  pops=pops.filter(p=>now-p.t<800);
+  ctx.textAlign='center'; ctx.font='16px VT323, monospace';
+  for(const p of pops){
+    const k=(now-p.t)/800;
+    ctx.globalAlpha=1-k; ctx.fillStyle='#29255a';
+    ctx.fillText(p.txt,p.x*PX+PX/2+1,p.y*PX-4-k*20+1);
+    ctx.fillStyle='#e5fb8e'; ctx.fillText(p.txt,p.x*PX+PX/2,p.y*PX-4-k*20);
+  }
+  ctx.globalAlpha=1;
+}
+function render(now){
+  ctx.save();
+  if(shake>0){ ctx.translate((Math.random()-.5)*shake,(Math.random()-.5)*shake); shake*=.82; if(shake<.5) shake=0; }
+  drawBoard();
+  // kid bobs gently
+  if(kid){
+    const s=1+Math.sin(now/220)*.04, born=Math.min(1,(now-kid.born)/200);
+    drawSprite(img[kid.name],kid.x,kid.y,0,s*born);
+  }
+  drawJane(now);
+  // carts, tail first so the head sits on top
+  for(let i=snake.length-1;i>=1;i--){
+    const s=snake[i], d=dirBetween(snake[i-1],s);
+    const f='cart_'+(((i+tick)%7)+1);
+    drawSprite(img[f],s.x,s.y,ROT[d]);
+  }
+  // head: mouth opens as a kid gets close
+  const h=snake[0];
+  let hf='Roller_coaster_head';
+  const dk=kid?Math.abs(kid.x-h.x)+Math.abs(kid.y-h.y):99;
+  if(now-ate<180 || dk<=1) hf='Roller_coaster_head_3';
+  else if(dk<=3) hf='Roller_coaster_head_2';
+  drawSprite(img[hf],h.x,h.y,ROT[dir]);
+  drawBursts(now); drawPops(now);
+  ctx.restore();
+}
+function speed(){ return Math.max(68,160-score*5); }
+function loop(now){
+  if(state==='play' && now-lastStep>=speed()){ lastStep=now; step(); }
+  render(now);
+  requestAnimationFrame(loop);
+}
+
+// ---------- HUD ----------
+function renderRoster(){
+  const r=document.getElementById('roster'); r.innerHTML='';
+  for(const k of KIDS){
+    const d=document.createElement('div'); d.className='kid'+(eaten[k]?' got':'');
+    d.innerHTML='<img alt="'+k+'" src="'+SPR[k]+'"><span>'+eaten[k]+'</span>'; r.appendChild(d);
+  }
+}
+function updScore(){ document.getElementById('score').textContent=score; }
+const ov=document.getElementById('ov');
+function showOv(t,p,b){ document.getElementById('ovT').textContent=t; document.getElementById('ovP').textContent=p; document.getElementById('go').textContent=b; ov.hidden=false; ov.classList.remove('off'); }
+
+// ---------- input ----------
+function turn(d){
+  if(state!=='play') return;
+  const last=queue.length?queue[queue.length-1]:dir;
+  const [a,b]=DIRS[d],[c,e]=DIRS[last];
+  if(a===-c&&b===-e) return; if(d===last) return;
+  if(queue.length<3) queue.push(d);
+}
+function start(){
+  document.getElementById('more').hidden=true;
+  initAudio();
+  if(state!=='paused') reset();
+  state='play'; ov.hidden=true; ov.classList.add('off'); document.activeElement&&document.activeElement.blur(); lastStep=performance.now();
+}
+function pause(){
+  if(state==='play'){ state='paused'; showOv('PAUSED','The kids are waiting. Jane is watching.','RESUME'); }
+  else if(state==='paused') start();
+}
+document.getElementById('go').onclick=start;
+const KEYS={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right',w:'up',s:'down',a:'left',d:'right',W:'up',S:'down',A:'left',D:'right'};
+addEventListener('keydown',e=>{
+  if(KEYS[e.key]){ e.preventDefault(); turn(KEYS[e.key]); }
+  else if(e.key===' '||e.key==='Enter'){ e.preventDefault(); if(state==='play'||state==='paused') pause(); else start(); }
+  else if(e.key==='p'||e.key==='Escape') pause();
+});
+document.querySelectorAll('.pad button').forEach(b=>b.addEventListener('pointerdown',e=>{e.preventDefault();turn(b.dataset.d);}));
+let t0=null;
+cv.addEventListener('touchstart',e=>{const t=e.touches[0];t0={x:t.clientX,y:t.clientY};},{passive:true});
+cv.addEventListener('touchmove',e=>{
+  if(!t0) return; const t=e.touches[0], dx=t.clientX-t0.x, dy=t.clientY-t0.y;
+  if(Math.max(Math.abs(dx),Math.abs(dy))<24) return;
+  turn(Math.abs(dx)>Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up'));
+  t0={x:t.clientX,y:t.clientY};
+},{passive:true});
+
+// ---------- sound ----------
+let ac=null, muted=false;
+try{ muted=localStorage.getItem('rcs-mute')==='1'; }catch(e){}
+const muteBtn=document.getElementById('mute');
+muteBtn.textContent='SOUND: '+(muted?'OFF':'ON');
+muteBtn.onclick=()=>{ muted=!muted; muteBtn.textContent='SOUND: '+(muted?'OFF':'ON'); try{localStorage.setItem('rcs-mute',muted?'1':'0');}catch(e){} };
+function initAudio(){ if(!ac){ try{ ac=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } if(ac&&ac.state==='suspended') ac.resume(); }
+function tone(f,dur,type='square',vol=.06,slide=0){
+  const o=ac.createOscillator(), g=ac.createGain(), t=ac.currentTime;
+  o.type=type; o.frequency.setValueAtTime(f,t); if(slide) o.frequency.exponentialRampToValueAtTime(slide,t+dur);
+  g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t+dur);
+}
+function sfx(k){
+  if(!ac||muted) return;
+  if(k==='eat'){ tone(520,.08); setTimeout(()=>tone(780,.1),60); }
+  if(k==='die'){ tone(300,.5,'sawtooth',.07,60); }
+  if(k==='glitch'){
+    const len=.22, b=ac.createBuffer(1,ac.sampleRate*len,ac.sampleRate), d=b.getChannelData(0);
+    for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*(((i>>9)&1)?1:.15);
+    const s=ac.createBufferSource(), g=ac.createGain(); g.gain.value=.08;
+    s.buffer=b; s.connect(g).connect(ac.destination); s.start();
+    tone(1800,.06,'square',.03,90);
+  }
+}
+
+// ---------- boot ----------
+function boot(){
+  janeR=tint(img.Jane,[1,0,0]); janeC=tint(img.Jane,[0,1,1]);
+  reset();
+  // idle demo frame so the board is alive behind the start screen
+  snake=[{x:6,y:8},{x:5,y:8},{x:4,y:8},{x:3,y:8},{x:3,y:9},{x:3,y:10}]; dir='right';
+  kid={x:9,y:8,name:'Noel',born:0};
+  requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>
